@@ -1,0 +1,23 @@
+,roomId,roomType,roomNo
+0,1,0,CSL001
+1,2,0,CSL002
+2,3,0,CSL003
+3,4,0,CSL101
+4,5,0,CSL102
+5,6,0,CSL103
+6,7,0,CSL104
+7,8,0,CSL105
+8,9,1,Aryabhatta Computer Center
+9,10,1,Rohini Computer Center
+10,11,1,Linux Laboratory
+11,12,1,Bhaskara Computer Center
+12,13,1,M. Tech. CSE Laboratory
+13,14,1,M. Tech. CNE Laboratory
+14,15,1,Project Laboratory
+15,16,1,Research Center
+16,17,1,LD Lab
+17,18,0,NA
+18,19,0,FREE
+19,20,0,ISE304
+20,21,0,M. Tech. CSE Theory
+21,22,0,M. Tech. CNE Theory
