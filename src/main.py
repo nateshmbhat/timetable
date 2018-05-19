@@ -11,7 +11,6 @@ def convert_db_data_to_csv(table_name , connection  , path = './data/' , filenam
     df.to_csv(os.path.join(path , filename)) ; 
 
 
-
 class Allotment:
     def __init__(self , subjectid ,  facultyid1 , facultyid2 , roomid , dayno , hour , subjectname='' ):
         self.subjectid =subjectid ; 
@@ -71,7 +70,5 @@ class Timetable:
     def check_allotment_validity(self , allotment ):
         for allots in self.allotments:
             pass ; 
-            
-
 
 Timetable()
