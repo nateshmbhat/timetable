@@ -8,7 +8,6 @@ import sqlite3 , re , copy
 def convert_db_data_to_csv(table_name , connection  , path = './data/' , filename="mydata.csv" ):
     df = pd.DataFrame(pd.read_sql('select * from '+table_name , connection)) ; 
     df.to_csv(os.path.join(path , filename)) ;
-
 class allotment:
     
     def __init__(self , subjectid ,  facultyid1 , facultyid2 , roomid , dayno , hour , subjectname='' ):
@@ -126,7 +125,7 @@ class Timetable:
     def get_free_faculty_and_allot(self , facultylist , day , hour ):
         '''Returns a random faculty from a np.array list of faculties who is free at that day and hour '''
         
-        faculties = facultylist.values
+        faculties = facultylist
         
         try:
             for faculty in faculties:
@@ -197,22 +196,34 @@ class Timetable:
                         batch_subs = np.delete(batch_subs , selected_subject_index) ;
                         
                     
-                    selected_faculty = self.get_free_faculty_and_allot(self.test_data[self.test_data['subjectID']==selected_subject].facultyID1 , day= day , hour = hour) 
+                    selected_faculty = self.get_free_faculty_and_allot( facultylist=self.normal_subject_to_faculty[selected_subject] , day= day , hour = hour) 
                     
                     allotment = allotment.append({'section' : section , 'day' : day , 'hour' : hour  , 'subjectid' : selected_subject , 'roomno' : selected_room , 'facultyid' : selected_faculty } , ignore_index=True)
                     
         self.non_lab_allotment = allotment ;
         
-        
+
     
     def allot_slots_lab_class(self):
         
 #         returns true if all batch to labsubs are empty meaning all batches are alloted with all labsubs
         def check_if_all_batch_to_labsubs_empty(batch_to_lablist):
             for labset in batch_to_lablist.values():
-                if(labset):
+                if(not labset):
                     return False
             return True ;
+        
+        def choose_next_subject(batch , intersection  , batch_to_lablist):
+            
+            for sub in intersection:
+                temp_batch_to_lablist = copy.deepcopy(batch_to_lablist)
+                temp_batch_to_lablist[batch].remove(sub) ; 
+
+                minlen = min([len(labs) for labs in temp_batch_to_lablist.values()])
+
+
+                
+                
         
         
         non_lab_allotment_sec_day_hour_index = self.non_lab_allotment.set_index(['section' , 'day' , 'hour'])
@@ -223,7 +234,7 @@ class Timetable:
             labsubs = self.section_to_labsubjects.get(section)
             
             batch_to_lablist = {}
-            
+             
             selected_days_for_lab = set(random.sample(['mon' , 'tue' ,'wed' , 'thu' , 'fri'] , len(labsubs)))
             
             
@@ -234,7 +245,7 @@ class Timetable:
 #             while(selected_days_for_lab):
                 
             while(check_if_all_batch_to_labsubs_empty(batch_to_lablist)):
-                selected_day = random.choice(selected_days_for_lab);
+                selected_day = random.choice(list(selected_days_for_lab));
 
                 selected_days_for_lab.remove(selected_day) ; 
 
@@ -246,35 +257,43 @@ class Timetable:
 
                 #type : set 
                 #reset this before starting iterating over batches
-                labsubs_left_to_be_assigned = labsubs
+                labsubs_left_to_be_assigned = copy.deepcopy(labsubs);
                 
                 #map from batch to selected_lab for the current "day"
                 batch_to_selected_lab = {}
-                
+
+                previous_batch = None                
 
                 for batch in batchlist:
                     intersection = labsubs_left_to_be_assigned.intersection(batch_to_lablist.get(batch))
-                    selected_lab = random.choice(list(intersection))
+                    print( batch_to_lablist , labsubs_left_to_be_assigned , '\n\n\n') ;
+                    selected_lab = choose_next_subject(batch , intersection , batch_to_lablist) 
                     batch_to_selected_lab.update({batch : selected_lab})
                     
                     labsubs_left_to_be_assigned.remove(selected_lab)
                     batch_to_lablist.get(batch).remove(selected_lab)
+
+                    previous_batch = copy.deepcopy(batch) ;
                     
 #               # unallot faculty slots for the lab timiming from selected_hour
                 # assuming 3 hours duration for each lab
                 for hour in range(selected_hour , selected_hour+3):
-                    self.unallot_faculty_slot(day = selected_day , hour = hour , faculty_id  = non_lab_allotment_sec_day_hour_index.loc[(section , selected_day , hour)].facultyid)
+                    self.unallot_faculty_slot(day = selected_day , hour = hour , facultyid  = non_lab_allotment_sec_day_hour_index.loc[(section , selected_day , hour)].facultyid)
                 
+                #assuming 3 hours for each lab
                 for batch in batchlist:
-                    lab_allotment_only.append({'section' : section , 'batch' : batch , 'day' : selected_day , 'hour' : range(selected_hour , selected_hour+3 ) , 'subjectid' : batch_to_selected_lab.get(batch)}) ; 
+                    lab_allotment_only = lab_allotment_only.append({'section' : section , 'batch' : batch , 'day' : selected_day , 'hour' : range(selected_hour , selected_hour+3 ) , 'subjectid' : batch_to_selected_lab.get(batch)} , ignore_index=True) ; 
                 
-            return lab_allotment_only ;
-                    
-                        
+        return lab_allotment_only ;
+        
+        
+#   returns None   
     def unallot_faculty_slot(self , day , hour , facultyid ):
-        self.faculty_to_day_hour_slot_map[facultyid][day][hour] = copy.deepcopy({alloted : False }) 
+        if(not facultyid):
+            return ; 
+        self.faculty_to_day_hour_slot_map[facultyid][day][hour] = copy.deepcopy({'alloted' : False }) 
     
-    
+#     returns None
     def create_faculty_objects(self):
         '''Create facultie objects using the data ''' 
         self.faculties = set() ;
@@ -283,7 +302,7 @@ class Timetable:
                 
         
                     
-    
+#     returns bool  , true if success
     def check_allotment_validity(self , allotment_dataframe = None ):
         '''checks if the allotment DataFrame satisfies the hard constraints '''
         if(not allotment_dataframe):
@@ -303,6 +322,7 @@ class Timetable:
                     return  False ;
         
         print("\nSUCCESS ^_^ ") ; 
+        return True ;
             
 
 obj = Timetable()
