@@ -1,4 +1,5 @@
 import pandas as pd ; 
+from collections import  deque
 import numpy as np 
 import time , os , sys , random 
 import sqlite3 , re , copy
@@ -115,7 +116,7 @@ class Timetable:
         for section in self.sectionslist:
             batches = copy.deepcopy([]) ; 
             for batch in self.all_lab_batches:
-                if(re.match(section+'\d+$' , batch)):
+                if(re.match(section+'\d+$' , batch) and len(section)>1):
                     batches.append(batch) ; 
             self.section_to_batches.update({section: batches }) ;
         
@@ -213,17 +214,15 @@ class Timetable:
                     return False
             return True ;
         
-        def choose_next_subject(batch , intersection  , batch_to_lablist):
-            
-            for sub in intersection:
-                temp_batch_to_lablist = copy.deepcopy(batch_to_lablist)
-                temp_batch_to_lablist[batch].remove(sub) ; 
+        # stores consequent rotated array of labs to be assigned to batches
+        # def (batch_to_list, lablist):
+        #     for batch in batch_to_lablist.keys():
 
-                minlen = min([len(labs) for labs in temp_batch_to_lablist.values()])
+        def rotate_batch_subject_queue(batchlist , batch_to_lablist):
+            randomrotate_index = random.randrange(10) ; 
+            for batch in batchlist:
+                batch_to_lablist[batch].rotate(randomrotate_index)
 
-
-                
-                
         
         
         non_lab_allotment_sec_day_hour_index = self.non_lab_allotment.set_index(['section' , 'day' , 'hour'])
@@ -235,11 +234,17 @@ class Timetable:
             
             batch_to_lablist = {}
              
-            selected_days_for_lab = set(random.sample(['mon' , 'tue' ,'wed' , 'thu' , 'fri'] , len(labsubs)))
+            selected_days_for_lab = set(random.sample(['mon' , 'tue' ,'wed' , 'thu' , 'fri'] , len(labsubs))) 
             
-            
+            labsubslist = list(labsubs) ;
+
+            labs_queue = deque(labsubs) ; 
+
             for batch in batchlist:
-                batch_to_lablist.update({batch : copy.deepcopy(labsubs)})
+                batch_to_lablist.update({batch : copy.deepcopy(labs_queue)})
+                labs_queue.rotate(1) ;
+            
+            rotate_batch_subject_queue(batchlist = batchlist , batch_to_lablist = batch_to_lablist ) ; 
 
                 
 #             while(selected_days_for_lab):
@@ -257,23 +262,21 @@ class Timetable:
 
                 #type : set 
                 #reset this before starting iterating over batches
-                labsubs_left_to_be_assigned = copy.deepcopy(labsubs);
+                # labsubs_left_to_be_assigned = copy.deepcopy(labsubs);
                 
                 #map from batch to selected_lab for the current "day"
                 batch_to_selected_lab = {}
 
-                previous_batch = None                
-
                 for batch in batchlist:
-                    intersection = labsubs_left_to_be_assigned.intersection(batch_to_lablist.get(batch))
-                    print( batch_to_lablist , labsubs_left_to_be_assigned , '\n\n\n') ;
-                    selected_lab = choose_next_subject(batch , intersection , batch_to_lablist) 
-                    batch_to_selected_lab.update({batch : selected_lab})
-                    
-                    labsubs_left_to_be_assigned.remove(selected_lab)
-                    batch_to_lablist.get(batch).remove(selected_lab)
 
-                    previous_batch = copy.deepcopy(batch) ;
+                    selected_lab = batch_to_lablist[batch][0]
+
+                    batch_to_selected_lab.update({batch : selected_lab})
+
+                    batch_to_lablist.get(batch).remove(selected_lab)
+                
+                rotate_batch_subject_queue(batchlist = batchlist , batch_to_lablist = batch_to_lablist ) ; 
+
                     
 #               # unallot faculty slots for the lab timiming from selected_hour
                 # assuming 3 hours duration for each lab
