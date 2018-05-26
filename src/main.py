@@ -1,14 +1,20 @@
 import pandas as pd ; 
-from collections import  deque
 import numpy as np 
-import time , os , sys , random 
-import sqlite3 , re , copy
-
-
+import time , os , sys , random
+import sqlite3 , re , copy 
+import matplotlib.pyplot as plt
+import ipdb
+from collections import deque
 
 def convert_db_data_to_csv(table_name , connection  , path = './data/' , filename="mydata.csv" ):
     df = pd.DataFrame(pd.read_sql('select * from '+table_name , connection)) ; 
     df.to_csv(os.path.join(path , filename)) ;
+
+def convert_dataframe_to_sql(dataframe , path_to_db, tablename='allotment'):
+    con = sqlite3.connect(path_to_db) ;
+    dataframe.to_sql(tablename , con , if_exists= 'replace');
+
+
 class allotment:
     
     def __init__(self , subjectid ,  facultyid1 , facultyid2 , roomid , dayno , hour , subjectname='' ):
@@ -141,13 +147,21 @@ class Timetable:
             
     
     def display_time_table(self , section , facultyid=False , facultyname = True):
-        asec = self.non_lab_allotment[self.non_lab_allotment.section=='6A']
-        asec = asec.drop(['section' , 'roomno'], axis=1) 
-        asec = asec.set_index(['day' , 'hour'])
-        asec['subjectname'] = asec.subjectid.apply(lambda x :self.subject_data[self.subject_data.subjectId==x].values[0][1])
-        asec = asec[['subjectname' , 'facultyid']].apply(lambda x : x.subjectname + ' >> ' +  str(x.facultyid)  , axis=1).unstack()
-        print(asec) ; 
-        return asec
+        
+        def getsubjectname(x):
+            temp = self.subject_data[self.subject_data.subjectId == x].subjectName.values
+            if(not len(temp)):
+                return ''
+            else:
+                return temp[0] ; 
+            
+
+        df = self.final_allotment[self.final_allotment.section == section] ; 
+        df['subjectname'] = df.subjectid.apply(getsubjectname)
+        df = df.set_index(['section' , 'day' , 'hour']) ;
+        print(df) ;
+        print(self.lab_allotment_only[self.lab_allotment_only.section==section])
+        return df
         
         
         
@@ -199,7 +213,7 @@ class Timetable:
                     
                     selected_faculty = self.get_free_faculty_and_allot( facultylist=self.normal_subject_to_faculty[selected_subject] , day= day , hour = hour) 
                     
-                    allotment = allotment.append({'section' : section , 'day' : day , 'hour' : hour  , 'subjectid' : selected_subject , 'roomno' : selected_room , 'facultyid' : selected_faculty } , ignore_index=True)
+                    allotment.loc[len(allotment)] = {'section' : section , 'day' : day , 'hour' : hour  , 'subjectid' : selected_subject , 'roomno' : selected_room , 'facultyid' : selected_faculty }
                     
         self.non_lab_allotment = allotment ;
         
@@ -226,11 +240,14 @@ class Timetable:
         
         
         non_lab_allotment_sec_day_hour_index = self.non_lab_allotment.set_index(['section' , 'day' , 'hour'])
+        self.non_lab_allotment_sec_day_hour_index = non_lab_allotment_sec_day_hour_index
         lab_allotment_only = pd.DataFrame(columns=['section' , 'batch', 'day' , 'hour'  , 'subjectid' ])
         
         for section in self.sectionslist:
             batchlist = self.section_to_batches.get(section) 
             labsubs = self.section_to_labsubjects.get(section)
+            if(not labsubs):
+                continue ; 
             
             batch_to_lablist = {}
              
@@ -247,9 +264,9 @@ class Timetable:
             rotate_batch_subject_queue(batchlist = batchlist , batch_to_lablist = batch_to_lablist ) ; 
 
                 
-#             while(selected_days_for_lab):
                 
             while(check_if_all_batch_to_labsubs_empty(batch_to_lablist)):
+        
                 selected_day = random.choice(list(selected_days_for_lab));
 
                 selected_days_for_lab.remove(selected_day) ; 
@@ -286,8 +303,36 @@ class Timetable:
                 #assuming 3 hours for each lab
                 for batch in batchlist:
                     lab_allotment_only = lab_allotment_only.append({'section' : section , 'batch' : batch , 'day' : selected_day , 'hour' : range(selected_hour , selected_hour+3 ) , 'subjectid' : batch_to_selected_lab.get(batch)} , ignore_index=True) ; 
-                
-        return lab_allotment_only ;
+    
+        
+        
+        self.lab_allotment_only = lab_allotment_only
+        
+        self.allot_lab_faculties_and_fill_the_non_lab_allotment_dataframe()
+        return lab_allotment_only
+    
+    
+#     returns None
+    def allot_lab_faculties_and_fill_the_non_lab_allotment_dataframe(self):
+        rows = self.lab_allotment_only.hour.count() ;
+        non_lab_allotment_sec_day_hour_index_copy = copy.deepcopy(self.non_lab_allotment_sec_day_hour_index);
+        
+        for row in range(rows):
+            rowdata = self.lab_allotment_only.loc[row] 
+            hours = list(rowdata.hour) ; 
+            
+            for hour in hours:
+                selected_faculty = self.get_free_faculty_and_allot(self.subject_to_faculties[rowdata.subjectid] , rowdata.day , hour ) ; 
+                tempdf = non_lab_allotment_sec_day_hour_index_copy.loc[(rowdata.section , rowdata.day , hour )]
+                tempdf.facultyid = selected_faculty
+                tempdf.subjectid = "LAB"
+#                 tempdf.roomno keep the room number as it is
+        
+        self.final_allotment = non_lab_allotment_sec_day_hour_index_copy.reset_index() ; 
+            
+            
+            
+        
         
         
 #   returns None   
@@ -333,5 +378,7 @@ obj = Timetable()
 
 if(__name__=='__main__'):
     obj.allot_slots_normal_class() ; 
-    print(obj.allot_slots_lab_class()) ;
-    print(obj.non_lab_allotment)
+    obj.allot_slots_lab_class() ; 
+    obj.check_allotment_validity() 
+
+    obj.display_time_table(section = '4A')
