@@ -381,4 +381,5 @@ if(__name__=='__main__'):
     obj.allot_slots_lab_class() ; 
     obj.check_allotment_validity() 
 
-    obj.display_time_table(section = '4A')
+    # This is the main display function 
+    obj.display_time_table('4A')
